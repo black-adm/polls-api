@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { prisma } from '../../lib/prisma'
+import { randomUUID } from 'crypto'
 
 export async function voteOnPoll(app: FastifyInstance) {
   app.post('/polls/:pollId/votes', async (request, reply) => {
@@ -15,7 +15,20 @@ export async function voteOnPoll(app: FastifyInstance) {
 
     const { pollId } = voteOnPollParams.parse(request.params)
     const { pollOptionId } = voteOnPollBody.parse(request.body)
+    
+    let sessionId: string | undefined = request.cookies.sessionId
+    
+    if (!sessionId) {
+      sessionId = randomUUID()
 
-    return reply.status(201).send()
+      reply.setCookie('sessionId', sessionId, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 15, // 15 days
+        signed: true,
+        httpOnly: true,
+      })
+    }
+
+    return reply.status(201).send({ sessionId })
   })
 }
