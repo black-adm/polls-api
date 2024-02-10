@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
 import { prisma } from '../../lib/prisma'
+import { redis } from '../../lib/redis'
 
 export async function voteOnPoll(app: FastifyInstance) {
   app.post('/polls/:pollId/votes', async (request, reply) => {
@@ -29,17 +30,17 @@ export async function voteOnPoll(app: FastifyInstance) {
       })
       
       if (userPreviousVoteOnPoll && userPreviousVoteOnPoll.pollOptionId !== pollOptionId) {
-        return await prisma.vote.delete({
+        await prisma.vote.delete({
           where: { id: userPreviousVoteOnPoll.id }
         })
-      } 
 
-      if (userPreviousVoteOnPoll) return reply.status(400).send({ message: 'Você já enviou seu voto para esta enquete!' })
+        await redis.zincrby(pollId, -1, userPreviousVoteOnPoll.pollOptionId)
+      } 
+      else if (userPreviousVoteOnPoll) return reply.status(400).send({ message: 'Você já enviou seu voto para esta enquete!' })
     }
 
     if (!sessionId) {
       sessionId = randomUUID()
-
       reply.setCookie('sessionId', sessionId, {
         path: '/',
         maxAge: 60 * 60 * 24 * 15, // 15 days
@@ -56,6 +57,7 @@ export async function voteOnPoll(app: FastifyInstance) {
       }
     })
 
+    await redis.zincrby(pollId, 1, pollOptionId)
     return reply.status(201).send()
   })
 }
